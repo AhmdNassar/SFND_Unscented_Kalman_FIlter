@@ -255,6 +255,50 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
    * covariance, P_.
    * You can also calculate the lidar NIS, if desired.
    */
+   VectorXd z = meas_package.raw_measurements_;
+  int n_z = 2;
+  MatrixXd Zsig = MatrixXd(n_z, 2*n_aug_+1);
+  MatrixXd z_pred = VectorXd(n_z);
+  MatrixXd S = MatrixXd(n_z,n_z);
+  MatrixXd Tc = MatrixXd(n_x_,n_z);
+  
+  Zsig.fill(0.0);
+  for (int i=0; i<2*n_aug_+1; i++)
+  {
+    Zsig(0,i) = Xsig_pred_(0,i);                   
+    Zsig(1,i) = Xsig_pred_(1,i);                               
+  }
+  z_pred.fill(0.0);
+  for (int i=0; i < 2*n_aug_+1; ++i) 
+  {
+    z_pred = z_pred + weights_(i) * Zsig.col(i);
+  }  // mean predicted measurement
+
+  S.fill(0.0);
+  Tc.fill(0.0);
+  for (int i = 0; i < 2*n_aug_+1; ++i) 
+  {  // 2n+1 simga points
+    // residual
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+
+    S = S + weights_(i) * z_diff * z_diff.transpose();
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+    // angle normalization
+    while (x_diff(3)> M_PI) x_diff(3)-=2.*M_PI;
+    while (x_diff(3)<-M_PI) x_diff(3)+=2.*M_PI;
+
+    Tc = Tc + weights_(i) * x_diff * z_diff.transpose();
+  }  // innovation covariance matrix S
+  MatrixXd R = MatrixXd(n_z,n_z);
+  R <<  std_laspx_*std_laspx_, 0,
+        0, std_laspy_*std_laspy_;
+  S = S + R;  // add measurement noise covariance matrix
+
+  MatrixXd K = Tc * S.inverse();   // Kalman gain K;
+  VectorXd z_diff = z - z_pred;    // residual
+
+  x_ = x_ + K*z_diff;
+  P_ = P_ - K*S*K.transpose();
 }
 
 void UKF::UpdateRadar(MeasurementPackage meas_package) {
